@@ -12,9 +12,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
     
-    <!-- Img.ly Background Removal -->
-    <script src="https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.3.0/dist/browser/bundle.umd.min.js"></script>
-
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -42,6 +39,7 @@
             color: #666;
             margin-bottom: 15px;
             min-height: 20px;
+            word-wrap: break-word;
         }
         model-viewer {
             width: 100%;
@@ -82,7 +80,11 @@
         </model-viewer>
     </div>
 
-    <script>
+    <!-- Script diubah menjadi type="module" -->
+    <script type="module">
+        // Import langsung menggunakan ES Module dari CDN yang lebih stabil
+        import { removeBackground } from "https://unpkg.com/@imgly/background-removal@1.4.5/dist/browser/bundle.mjs";
+
         const imageInput = document.getElementById('imageInput');
         const statusText = document.getElementById('status');
         const viewer = document.getElementById('viewer');
@@ -92,21 +94,23 @@
             if (!file) return;
 
             try {
-                // 1. Hapus Background
-                statusText.innerText = "Memproses AI... (Download model ~40MB di awal, pastikan koneksi stabil)";
+                // Reset UI
+                statusText.style.color = "#666";
+                statusText.innerText = "Mendownload model AI (~40MB) & Memproses gambar... (Tunggu sebentar)";
                 viewer.style.display = 'none';
                 
-                // PERBAIKAN: Menambahkan publicPath agar file model WASM bisa didownload dengan benar
+                // Konfigurasi path public
                 const config = {
-                    publicPath: "https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.3.0/dist/"
+                    publicPath: "https://unpkg.com/@imgly/background-removal@1.4.5/dist/"
                 };
 
-                const imageBlob = await imglyRemoveBackground(file, config);
+                // Proses Hapus Background
+                const imageBlob = await removeBackground(file, config);
                 const imageUrl = URL.createObjectURL(imageBlob);
                 
-                statusText.innerText = "Mengubah ke format 3D (AR)...";
+                statusText.innerText = "Gambar dipotong! Mengubah ke format 3D (AR)...";
 
-                // 2. Buat Image Object
+                // Memuat gambar untuk mengambil dimensinya
                 const img = new Image();
                 img.src = imageUrl;
                 await new Promise((resolve, reject) => {
@@ -114,19 +118,21 @@
                     img.onerror = () => reject(new Error("Gagal meload gambar hasil crop"));
                 });
 
+                // Menyesuaikan rasio gambar
                 const aspect = img.width / img.height;
                 const width = aspect > 1 ? 1 : aspect;
                 const height = aspect > 1 ? 1 / aspect : 1;
 
-                // 3. Konversi ke 3D GLB
+                // Proses konversi ke 3D (Three.js)
                 const scene = new THREE.Scene();
-                
                 const textureLoader = new THREE.TextureLoader();
                 const texture = await new Promise((resolve, reject) => {
-                    textureLoader.load(imageUrl, resolve, undefined, () => reject(new Error("Gagal meload tekstur 3D")));
+                    textureLoader.load(imageUrl, resolve, undefined, () => reject(new Error("Gagal membuat tekstur 3D")));
                 });
+                
                 texture.encoding = THREE.sRGBEncoding;
 
+                // Membuat kertas 3D (Plane)
                 const material = new THREE.MeshBasicMaterial({ 
                     map: texture, 
                     transparent: true, 
@@ -138,23 +144,24 @@
                 const plane = new THREE.Mesh(geometry, material);
                 scene.add(plane);
 
+                // Mengekspor ke format .glb
                 const exporter = new THREE.GLTFExporter();
                 exporter.parse(scene, function (gltf) {
                     const blob = new Blob([gltf], { type: 'model/gltf-binary' });
                     const glbUrl = URL.createObjectURL(blob);
 
-                    // 4. Tampilkan Model
+                    // Menampilkan ke Model Viewer
                     viewer.src = glbUrl;
                     viewer.style.display = 'block';
-                    statusText.innerText = "Selesai! Klik 'View in AR' untuk menempelkannya.";
+                    statusText.style.color = "green";
+                    statusText.innerText = "Selesai! Klik 'View in AR' lalu arahkan kamera ke dinding.";
                     
                 }, { binary: true });
 
             } catch (error) {
                 console.error(error);
-                // PERBAIKAN: Menampilkan pesan error spesifik ke layar agar mudah di-debug
-                statusText.innerText = "Error: " + (error.message || "Gagal memproses gambar.");
                 statusText.style.color = "red";
+                statusText.innerText = "Error: " + (error.message || "Gagal memproses gambar.");
             }
         });
     </script>
