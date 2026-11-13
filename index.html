@@ -38,7 +38,7 @@
             font-size: 14px;
             color: #666;
             margin-bottom: 15px;
-            min-height: 20px;
+            min-height: 40px;
             word-wrap: break-word;
         }
         model-viewer {
@@ -80,11 +80,8 @@
         </model-viewer>
     </div>
 
-    <!-- Script diubah menjadi type="module" -->
-    <script type="module">
-        // Import langsung menggunakan ES Module dari CDN yang lebih stabil
-        import { removeBackground } from "https://unpkg.com/@imgly/background-removal@1.4.5/dist/browser/bundle.mjs";
-
+    <!-- Script HTML biasa, modul dipanggil secara dinamis di dalam klik -->
+    <script>
         const imageInput = document.getElementById('imageInput');
         const statusText = document.getElementById('status');
         const viewer = document.getElementById('viewer');
@@ -94,23 +91,25 @@
             if (!file) return;
 
             try {
-                // Reset UI
-                statusText.style.color = "#666";
-                statusText.innerText = "Mendownload model AI (~40MB) & Memproses gambar... (Tunggu sebentar)";
+                // UI pasti merespons sekarang
+                statusText.style.color = "#0056b3";
+                statusText.innerText = "Tahap 1/3: Mendownload library AI... (Tunggu sebentar)";
                 viewer.style.display = 'none';
+
+                // DYNAMIC IMPORT: Memanggil library HANYA saat file dipilih
+                const imgly = await import("https://unpkg.com/@imgly/background-removal@1.4.5/dist/browser/bundle.mjs");
                 
-                // Konfigurasi path public
+                statusText.innerText = "Tahap 2/3: Menghapus background... (Download AI Model ~40MB di awal)";
+
                 const config = {
                     publicPath: "https://unpkg.com/@imgly/background-removal@1.4.5/dist/"
                 };
 
-                // Proses Hapus Background
-                const imageBlob = await removeBackground(file, config);
+                const imageBlob = await imgly.removeBackground(file, config);
                 const imageUrl = URL.createObjectURL(imageBlob);
                 
-                statusText.innerText = "Gambar dipotong! Mengubah ke format 3D (AR)...";
+                statusText.innerText = "Tahap 3/3: Gambar dipotong! Membangun model 3D (AR)...";
 
-                // Memuat gambar untuk mengambil dimensinya
                 const img = new Image();
                 img.src = imageUrl;
                 await new Promise((resolve, reject) => {
@@ -118,12 +117,10 @@
                     img.onerror = () => reject(new Error("Gagal meload gambar hasil crop"));
                 });
 
-                // Menyesuaikan rasio gambar
                 const aspect = img.width / img.height;
                 const width = aspect > 1 ? 1 : aspect;
                 const height = aspect > 1 ? 1 / aspect : 1;
 
-                // Proses konversi ke 3D (Three.js)
                 const scene = new THREE.Scene();
                 const textureLoader = new THREE.TextureLoader();
                 const texture = await new Promise((resolve, reject) => {
@@ -132,7 +129,6 @@
                 
                 texture.encoding = THREE.sRGBEncoding;
 
-                // Membuat kertas 3D (Plane)
                 const material = new THREE.MeshBasicMaterial({ 
                     map: texture, 
                     transparent: true, 
@@ -144,13 +140,11 @@
                 const plane = new THREE.Mesh(geometry, material);
                 scene.add(plane);
 
-                // Mengekspor ke format .glb
                 const exporter = new THREE.GLTFExporter();
                 exporter.parse(scene, function (gltf) {
                     const blob = new Blob([gltf], { type: 'model/gltf-binary' });
                     const glbUrl = URL.createObjectURL(blob);
 
-                    // Menampilkan ke Model Viewer
                     viewer.src = glbUrl;
                     viewer.style.display = 'block';
                     statusText.style.color = "green";
